@@ -1,13 +1,11 @@
-import {
-  Editor,
-  MarkdownView,
-  Notice,
-  Plugin,
-  TFile,
-  MarkdownFileInfo,
-} from 'obsidian';
+import { Editor, MarkdownView, Plugin, MarkdownFileInfo } from 'obsidian';
 import { getIdFromUrl, getUrlFromId, HackMDClient } from './client';
-import { ObsidianService } from './obsidian-service';
+import {
+  ObsidianService,
+  IEditor,
+  IFile,
+  IObsidianService,
+} from './obsidian-service';
 import {
   HackMDPluginSettings,
   DEFAULT_SETTINGS,
@@ -28,10 +26,10 @@ import {
 export default class HackMDPlugin extends Plugin {
   settings: HackMDPluginSettings;
   private readonly SYNC_TIME_MARGIN = 4000;
-  private obsidianService: ObsidianService;
+  private obsidianService: IObsidianService;
 
   async onload() {
-    this.obsidianService = new ObsidianService();
+    this.obsidianService = new ObsidianService(this.app);
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
     this.registerEditorCommands();
     this.registerCreateFromHackMDCommand();
@@ -50,12 +48,12 @@ export default class HackMDPlugin extends Plugin {
       },
       {
         name: 'Force Push',
-        callback: (editor: Editor, file: TFile) =>
+        callback: (editor: IEditor, file: IFile) =>
           this.pushToHackMD(editor, file, 'force'),
       },
       {
         name: 'Force Pull',
-        callback: (editor: Editor, file: TFile) =>
+        callback: (editor: IEditor, file: IFile) =>
           this.pullFromHackMD(editor, file, 'force'),
       },
       {
@@ -80,12 +78,14 @@ export default class HackMDPlugin extends Plugin {
   private createEditorCallback<T extends (...args: any[]) => Promise<void>>(
     callback: T
   ) {
-    return async (editor?: Editor, ctx?: MarkdownView | MarkdownFileInfo) => {
+    return async (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
       try {
-        if (!ctx || !(ctx instanceof MarkdownView) || !ctx.file) {
+        if (!(ctx instanceof MarkdownView) || !ctx.file) {
           throw new HackMDError(HackMDErrorType.NO_ACTIVE_NOTE);
         }
-        await callback(editor, ctx.file);
+        const editorAdapter = this.obsidianService.wrapObsidianEditor(editor);
+        const fileAdapter = this.obsidianService.wrapObsidianFile(ctx.file);
+        await callback(editorAdapter, fileAdapter);
       } catch (error) {
         this.handleCommandError(error);
       }
@@ -114,9 +114,9 @@ export default class HackMDPlugin extends Plugin {
     console.error('Command failed:', error);
     if (error instanceof HackMDError) {
       // Use the error message directly - it's already user-friendly
-      new Notice(error.message);
+      this.obsidianService.notifyUser(error.message);
     } else {
-      new Notice(`Operation failed: ${error.message}`);
+      this.obsidianService.notifyUser(`Operation failed: ${error.message}`);
     }
   }
 
@@ -128,8 +128,8 @@ export default class HackMDPlugin extends Plugin {
   }
 
   private async pushToHackMD(
-    editor: Editor,
-    file: TFile,
+    editor: IEditor,
+    file: IFile,
     mode: SyncMode = 'normal'
   ): Promise<void> {
     const client = await this.getClient();
@@ -155,20 +155,18 @@ export default class HackMDPlugin extends Plugin {
       updatedMetadata.teamPath = result.teamPath;
     }
 
-    // Create editor adapter
-    const editorAdapter = this.obsidianService.createEditorAdapter(editor);
     await this.updateLocalNote({
-      editor: editorAdapter,
+      editor,
       content,
       metadata: updatedMetadata,
     });
 
-    new Notice('Successfully pushed to HackMD!');
+    this.obsidianService.notifyUser('Successfully pushed to HackMD!');
   }
 
   private async pushNewNote(
-    editor: Editor,
-    file: TFile,
+    editor: IEditor,
+    file: IFile,
     content: string
   ): Promise<HackMDNote> {
     const client = await this.getClient();
@@ -186,25 +184,6 @@ export default class HackMDPlugin extends Plugin {
       writePermission: this.settings.defaultWritePermission,
       commentPermission: this.settings.defaultCommentPermission,
     });
-  }
-
-  /**
-   * Find a note in the vault with a specific HackMD ID
-   * @param noteId HackMD ID to search for
-   * @returns TFile if found, null otherwise
-   */
-  private findNoteWithHackMDId(noteId: string): TFile | null {
-    // Pre-calculate the exact URL we're looking for
-    const searchUrl = getUrlFromId(noteId);
-    const files = this.app.vault.getMarkdownFiles();
-
-    // Utiliser find pour une recherche plus élégante
-    return (
-      files.find(file => {
-        const cache = this.app.metadataCache.getFileCache(file);
-        return cache?.frontmatter?.url === searchUrl;
-      }) || null
-    );
   }
 
   /**
@@ -257,34 +236,15 @@ export default class HackMDPlugin extends Plugin {
   }
 
   /**
-   * Generates a unique filename to avoid conflicts
-   * @param baseTitle The original title to use as a base
-   * @returns A unique filename that doesn't exist in the vault
-   */
-  private generateUniqueFileName(baseTitle: string): string {
-    let fileName = `${baseTitle}.md`;
-    let filePath = this.app.vault.getAbstractFileByPath(fileName)?.path;
-    let counter = 1;
-
-    while (filePath) {
-      fileName = `${baseTitle} (${counter}).md`;
-      filePath = this.app.vault.getAbstractFileByPath(fileName)?.path;
-      counter++;
-    }
-
-    return fileName;
-  }
-
-  /**
    * Notifies the user that a note already exists and suggests next steps
    * @param existingNote The file that already contains this HackMD note
    */
-  private notifyExistingNote(existingNote: TFile): void {
-    new Notice(
+  private notifyExistingNote(existingNote: IFile): void {
+    this.obsidianService.notifyUser(
       `This note already exists at "${existingNote.path}". Open it and use the "Pull" command to update its content.`
     );
     // Optionally open the existing note
-    this.app.workspace.getLeaf(true).openFile(existingNote);
+    this.obsidianService.openFileInNewTab(existingNote);
   }
 
   /**
@@ -292,7 +252,7 @@ export default class HackMDPlugin extends Plugin {
    * @param fileName The name of the created file
    */
   private notifyNoteCreation(fileName: string): void {
-    new Notice(`Note created: ${fileName}`);
+    this.obsidianService.notifyUser(`Note created: ${fileName}`);
   }
 
   private async promptAndCreateNote(): Promise<void> {
@@ -321,6 +281,7 @@ export default class HackMDPlugin extends Plugin {
 
     // Check if the note already exists
     const existingNote = this.findNoteWithHackMDId(noteId);
+
     if (existingNote) {
       this.notifyExistingNote(existingNote);
       return;
@@ -340,19 +301,24 @@ export default class HackMDPlugin extends Plugin {
       noteData.teamPath
     );
 
-    // Create note with unique filename
-    const fileName = this.generateUniqueFileName(noteTitle);
-    const newFile = await this.app.vault.create(fileName, finalContent);
-
-    this.app.workspace.getLeaf(true).openFile(newFile);
+    const fileName =
+      await this.obsidianService.createAndOpenFileWithUniqueFilename(
+        noteTitle,
+        finalContent
+      );
 
     // Notify user
     this.notifyNoteCreation(fileName);
   }
 
+  private findNoteWithHackMDId(noteId: string): IFile | null {
+    const searchUrl = getUrlFromId(noteId);
+    return this.obsidianService.findFileByUrlProperty(searchUrl);
+  }
+
   private async pullFromHackMD(
-    editor: Editor,
-    file: TFile,
+    editor: IEditor,
+    file: IFile,
     mode: SyncMode = 'normal'
   ): Promise<void> {
     const client = await this.getClient();
@@ -377,29 +343,27 @@ export default class HackMDPlugin extends Plugin {
       updatedMetadata.teamPath = note.teamPath;
     }
 
-    // Create editor adapter
-    const editorAdapter = this.obsidianService.createEditorAdapter(editor);
     await this.updateLocalNote({
-      editor: editorAdapter,
+      editor: editor,
       content: note.content || '',
       metadata: updatedMetadata,
     });
 
-    new Notice('Successfully pulled from HackMD!');
+    this.obsidianService.notifyUser('Successfully pulled from HackMD!');
   }
 
-  private async copyHackMDUrl(editor: Editor): Promise<void> {
+  private async copyHackMDUrl(editor: IEditor): Promise<void> {
     const { noteId } = await this.prepareSync(editor);
 
     if (!noteId) {
       throw new HackMDError(HackMDErrorType.SYNC_NOT_LINKED);
     }
-
-    await navigator.clipboard.writeText(getUrlFromId(noteId));
-    new Notice('HackMD URL copied to clipboard!');
+    const url = getUrlFromId(noteId);
+    await this.obsidianService.copyToClipboard(url);
+    this.obsidianService.notifyUser('HackMD URL copied to clipboard!');
   }
 
-  private async deleteHackMDNote(editor: Editor, file: TFile): Promise<void> {
+  private async deleteHackMDNote(editor: IEditor, file: IFile): Promise<void> {
     const client = await this.getClient();
     const { frontmatter } = await this.prepareSync(editor);
     const noteId = frontmatter?.url ? getIdFromUrl(frontmatter.url) : undefined;
@@ -414,21 +378,20 @@ export default class HackMDPlugin extends Plugin {
       async () => {
         await client.deleteNote(noteId);
         await this.cleanupHackMDMetadata(editor);
-        new Notice('Successfully unlinked note from HackMD!');
+        this.obsidianService.notifyUser(
+          'Successfully unlinked note from HackMD!'
+        );
       }
     );
 
     modal.open();
   }
 
-  private async prepareSync(editor: Editor): Promise<SyncPrepareResult> {
+  private async prepareSync(editor: IEditor): Promise<SyncPrepareResult> {
     if (!editor) {
       throw new HackMDError(HackMDErrorType.NO_ACTIVE_NOTE);
     }
-
-    // Adapter pattern - wrap Obsidian's Editor with our interface
-    const editorAdapter = this.obsidianService.createEditorAdapter(editor);
-    const content = editorAdapter.getValue();
+    const content = editor.getValue();
     const { frontmatter } = this.getFrontmatter(content);
     const noteId = frontmatter?.url ? getIdFromUrl(frontmatter.url) : undefined;
     return { content, frontmatter, noteId };
@@ -454,10 +417,10 @@ export default class HackMDPlugin extends Plugin {
     }
   }
 
-  private async checkPushConflicts(file: TFile, noteId: string): Promise<void> {
+  private async checkPushConflicts(file: IFile, noteId: string): Promise<void> {
     const client = await this.getClient();
     const note = await client.getNote(noteId);
-    const content = await this.app.vault.read(file);
+    const content = await this.obsidianService.readFile(file);
     const { frontmatter } = this.getFrontmatter(content);
     const lastSyncStr = frontmatter?.lastSync;
 
@@ -475,8 +438,8 @@ export default class HackMDPlugin extends Plugin {
     }
   }
 
-  private async checkPullConflicts(file: TFile): Promise<void> {
-    const content = await this.app.vault.read(file);
+  private async checkPullConflicts(file: IFile): Promise<void> {
+    const content = await this.obsidianService.readFile(file);
     const { frontmatter } = this.getFrontmatter(content);
     const lastSyncStr = frontmatter?.lastSync;
 
@@ -485,7 +448,7 @@ export default class HackMDPlugin extends Plugin {
     }
 
     const lastSyncTime = new Date(lastSyncStr).getTime();
-    const localModTime = file.stat.mtime;
+    const localModTime = file.mtime;
 
     if (localModTime - lastSyncTime > this.SYNC_TIME_MARGIN) {
       throw new HackMDError(HackMDErrorType.SYNC_CONFLICT_LOCAL);
@@ -523,9 +486,8 @@ export default class HackMDPlugin extends Plugin {
     await this.saveData(this.settings);
   }
 
-  private async cleanupHackMDMetadata(editor: Editor): Promise<void> {
-    const editorAdapter = this.obsidianService.createEditorAdapter(editor);
-    const content = editorAdapter.getValue();
+  private async cleanupHackMDMetadata(editor: IEditor): Promise<void> {
+    const content = editor.getValue();
     const { frontmatter, content: noteContent } = this.getFrontmatter(content);
 
     if (frontmatter) {
@@ -542,9 +504,9 @@ export default class HackMDPlugin extends Plugin {
           cleanedFrontmatter,
           noteContent
         );
-        editorAdapter.setValue(frontmatterAndContent);
+        editor.setValue(frontmatterAndContent);
       } else {
-        editorAdapter.setValue(noteContent.trim());
+        editor.setValue(noteContent.trim());
       }
     }
   }

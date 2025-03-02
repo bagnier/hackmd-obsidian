@@ -8,9 +8,16 @@ import { vi } from 'vitest';
 export class MockObsidianService implements IObsidianService {
   // Create spies for all methods
   requestUrl = vi.fn();
+  wrapObsidianEditor = vi.fn();
+  wrapObsidianFile = vi.fn();
+  openFileInNewTab = vi.fn();
+  readFile = vi.fn();
+  findFileByUrlProperty = vi.fn();
+  createAndOpenFileWithUniqueFilename = vi.fn();
+  copyToClipboard = vi.fn();
+  notifyUser = vi.fn();
   parseYaml = vi.fn();
   stringifyYaml = vi.fn();
-  createEditorAdapter = vi.fn();
 
   /**
    * Default response configuration
@@ -29,7 +36,7 @@ export class MockObsidianService implements IObsidianService {
     this.stringifyYaml.mockImplementation((obj: any) => JSON.stringify(obj));
 
     // Default mock for createEditorAdapter
-    this.createEditorAdapter.mockImplementation(() => this.createMockEditor());
+    this.wrapObsidianEditor.mockImplementation(() => this.createMockEditor());
   }
 
   /**
