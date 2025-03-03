@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    testTimeout: 10000,
+    testTimeout: 10_000,
     exclude: ['**/node_modules/**', '**/dist/**', '.git/**']
   },
 });
