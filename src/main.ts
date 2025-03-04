@@ -6,11 +6,7 @@ import {
   IFile,
   IObsidianService,
 } from './obsidian-service';
-import {
-  HackMDPluginSettings,
-  DEFAULT_SETTINGS,
-  HackMDSettingTab,
-} from './settings';
+import { HackMDSettingTab } from './settings';
 import { ModalFactory } from './modal';
 import {
   HackMDMetadata,
@@ -21,6 +17,8 @@ import {
   HackMDNote,
   SyncPrepareResult,
   UpdateLocalNoteParams,
+  HackMDPluginSettings,
+  DEFAULT_SETTINGS,
 } from './types';
 
 export default class HackMDPlugin extends Plugin {
@@ -180,9 +178,9 @@ export default class HackMDPlugin extends Plugin {
     const contentWithTitle = this.combine(newFrontmatter, content);
     return client.createNote({
       content: contentWithTitle,
-      readPermission: this.settings.defaultReadPermission,
-      writePermission: this.settings.defaultWritePermission,
-      commentPermission: this.settings.defaultCommentPermission,
+      readPermission: this.settings.readPermission,
+      writePermission: this.settings.writePermission,
+      commentPermission: this.settings.commentPermission,
     });
   }
 

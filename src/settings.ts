@@ -1,25 +1,7 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
-import {
-  NotePermissionRole,
-  CommentPermissionType,
-} from '@hackmd/api/dist/type';
 import type HackMDPlugin from './main';
 import { HackMDClient } from './client';
-
-// Plugin settings configuration
-export interface HackMDPluginSettings {
-  accessToken: string;
-  defaultReadPermission: NotePermissionRole;
-  defaultWritePermission: NotePermissionRole;
-  defaultCommentPermission: CommentPermissionType;
-}
-
-export const DEFAULT_SETTINGS: HackMDPluginSettings = {
-  accessToken: '',
-  defaultReadPermission: NotePermissionRole.OWNER,
-  defaultWritePermission: NotePermissionRole.OWNER,
-  defaultCommentPermission: CommentPermissionType.DISABLED,
-};
+import { NotePermissionRole, CommentPermissionType } from './types';
 
 export class HackMDSettingTab extends PluginSettingTab {
   private readonly plugin: HackMDPlugin;
@@ -73,9 +55,9 @@ export class HackMDSettingTab extends PluginSettingTab {
             { value: NotePermissionRole.SIGNED_IN, label: 'Signed In Users' },
             { value: NotePermissionRole.GUEST, label: 'Everyone' },
           ],
-          this.plugin.settings.defaultReadPermission,
+          this.plugin.settings.readPermission,
           async (value: NotePermissionRole) => {
-            this.plugin.settings.defaultReadPermission = value;
+            this.plugin.settings.readPermission = value;
           }
         )
       );
@@ -93,9 +75,9 @@ export class HackMDSettingTab extends PluginSettingTab {
             { value: NotePermissionRole.SIGNED_IN, label: 'Signed In Users' },
             { value: NotePermissionRole.GUEST, label: 'Everyone' },
           ],
-          this.plugin.settings.defaultWritePermission,
+          this.plugin.settings.writePermission,
           async (value: NotePermissionRole) => {
-            this.plugin.settings.defaultWritePermission = value;
+            this.plugin.settings.writePermission = value;
             await this.plugin.saveData(this.plugin.settings);
           }
         )
@@ -119,9 +101,9 @@ export class HackMDSettingTab extends PluginSettingTab {
             },
             { value: CommentPermissionType.EVERYONE, label: 'Everyone' },
           ],
-          this.plugin.settings.defaultCommentPermission,
+          this.plugin.settings.commentPermission,
           async (value: CommentPermissionType) => {
-            this.plugin.settings.defaultCommentPermission = value;
+            this.plugin.settings.commentPermission = value;
             await this.plugin.saveData(this.plugin.settings);
           }
         )

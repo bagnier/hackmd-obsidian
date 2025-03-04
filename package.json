@@ -28,7 +28,6 @@
         "builtin-modules": "5.0.0",
         "esbuild": "0.25.0",
         "eslint": "^9.21.0",
-        "@hackmd/api": "^2.4.0",
         "obsidian": "latest",
         "prettier": "3.5.3",
         "tslib": "2.8.1",

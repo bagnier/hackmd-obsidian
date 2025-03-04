@@ -1,7 +1,3 @@
-import {
-  NotePermissionRole,
-  CommentPermissionType,
-} from '@hackmd/api/dist/type';
 import { IEditor } from './obsidian-service';
 
 // HackMD metadata stored in note frontmatter
@@ -51,6 +47,20 @@ export interface HackMDResponse {
   data: HackMDNote | HackMDUser | null;
 }
 
+export enum NotePermissionRole {
+  OWNER = 'owner',
+  SIGNED_IN = 'signed_in',
+  GUEST = 'guest',
+}
+
+export enum CommentPermissionType {
+  DISABLED = 'disabled',
+  FORBIDDEN = 'forbidden',
+  OWNERS = 'owners',
+  SIGNED_IN_USERS = 'signed_in_users',
+  EVERYONE = 'everyone',
+}
+
 // Only the options we actually send to the API
 export interface NoteOptions {
   title?: string;
@@ -63,10 +73,17 @@ export interface NoteOptions {
 // Plugin settings
 export interface HackMDPluginSettings {
   accessToken: string;
-  defaultReadPermission: NotePermissionRole;
-  defaultWritePermission: NotePermissionRole;
-  defaultCommentPermission: CommentPermissionType;
+  readPermission: NotePermissionRole;
+  writePermission: NotePermissionRole;
+  commentPermission: CommentPermissionType;
 }
+
+export const DEFAULT_SETTINGS: HackMDPluginSettings = {
+  accessToken: '',
+  readPermission: NotePermissionRole.OWNER,
+  writePermission: NotePermissionRole.OWNER,
+  commentPermission: CommentPermissionType.DISABLED,
+};
 
 // Modal configuration
 export interface ModalConfig {
