@@ -1,28 +1,41 @@
-import { Editor, MarkdownView, Plugin, MarkdownFileInfo } from 'obsidian';
+import { Editor, MarkdownFileInfo, MarkdownView, Plugin } from 'obsidian';
 import { getIdFromUrl, getUrlFromId, HackMDClient } from './client';
 import {
-  ObsidianService,
   IEditor,
   IFile,
   IObsidianService,
+  ObsidianService,
 } from './obsidian-service';
 import { HackMDSettingTab } from './settings';
 import { ModalFactory } from './modal';
 import {
-  HackMDMetadata,
-  NoteFrontmatter,
-  SyncMode,
+  DEFAULT_SETTINGS,
   HackMDError,
   HackMDErrorType,
+  HackMDMetadata,
   HackMDNote,
+  HackMDPluginSettings,
+  NoteFrontmatter,
+  SyncMode,
   SyncPrepareResult,
   UpdateLocalNoteParams,
-  HackMDPluginSettings,
-  DEFAULT_SETTINGS,
 } from './types';
 
 export default class HackMDPlugin extends Plugin {
-  settings: HackMDPluginSettings;
+  private settings: HackMDPluginSettings;
+  public getSettings(): HackMDPluginSettings {
+    return this.settings;
+  }
+
+  public async updateSettings(value: Partial<HackMDPluginSettings>) {
+    this.settings = {
+      ...this.settings,
+      ...value,
+    };
+    await this.saveData(this.settings);
+    HackMDClient.resetInstance();
+  }
+
   private readonly SYNC_TIME_MARGIN = 4000;
   private obsidianService: IObsidianService;
 

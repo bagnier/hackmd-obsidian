@@ -48,16 +48,16 @@ export interface HackMDResponse {
 }
 
 export enum NotePermissionRole {
-  OWNER = 'owner',
-  SIGNED_IN = 'signed_in',
-  GUEST = 'guest',
+  OWNER = 'Owner only',
+  SIGNED_IN = 'Signed in Users',
+  GUEST = 'Guest',
 }
 
 export enum CommentPermissionType {
-  DISABLED = 'disabled',
-  FORBIDDEN = 'forbidden',
-  OWNERS = 'owners',
-  SIGNED_IN_USERS = 'signed_in_users',
+  DISABLED = 'Disabled',
+  FORBIDDEN = 'Forbidden',
+  OWNERS = 'Owners only',
+  SIGNED_IN_USERS = 'Signed in Users',
   EVERYONE = 'everyone',
 }
 

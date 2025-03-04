@@ -1,7 +1,6 @@
-import { App, PluginSettingTab, Setting } from 'obsidian';
+import { App, DropdownComponent, PluginSettingTab, Setting } from 'obsidian';
 import type HackMDPlugin from './main';
-import { HackMDClient } from './client';
-import { NotePermissionRole, CommentPermissionType } from './types';
+import { CommentPermissionType, NotePermissionRole } from './types';
 
 export class HackMDSettingTab extends PluginSettingTab {
   private readonly plugin: HackMDPlugin;
@@ -15,11 +14,6 @@ export class HackMDSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    this.renderAccessTokenSetting();
-    this.renderPermissionSettings();
-  }
-
-  private renderAccessTokenSetting(): void {
     new Setting(this.containerEl)
       .setName('Token')
       .setDesc(
@@ -28,99 +22,84 @@ export class HackMDSettingTab extends PluginSettingTab {
       .addText(text =>
         text
           .setPlaceholder('Enter your HackMD access token')
-          .setValue(this.plugin.settings.accessToken || '')
-          .onChange(async value => {
-            this.plugin.settings.accessToken = value;
-            await this.plugin.saveData(this.plugin.settings);
-            HackMDClient.resetInstance();
+          .setValue(this.plugin.getSettings().accessToken || '')
+          .onChange(async accessToken => {
+            await this.plugin.updateSettings({ accessToken });
           })
       );
-  }
 
-  private renderPermissionSettings(): void {
-    this.renderReadPermissionSetting();
-    this.renderWritePermissionSetting();
-    this.renderCommentPermissionSetting();
-  }
-
-  private renderReadPermissionSetting(): void {
     new Setting(this.containerEl)
       .setName('Read permission')
       .setDesc('Read permission for new notes')
       .addDropdown(dropdown =>
         this.configurePermissionDropdown(
           dropdown,
-          [
-            { value: NotePermissionRole.OWNER, label: 'Owner' },
-            { value: NotePermissionRole.SIGNED_IN, label: 'Signed In Users' },
-            { value: NotePermissionRole.GUEST, label: 'Everyone' },
-          ],
-          this.plugin.settings.readPermission,
-          async (value: NotePermissionRole) => {
-            this.plugin.settings.readPermission = value;
+          NotePermissionRole,
+          this.plugin.getSettings().readPermission,
+          async (readPermission: NotePermissionRole) => {
+            await this.plugin.updateSettings({ readPermission });
           }
         )
       );
-  }
 
-  private renderWritePermissionSetting(): void {
     new Setting(this.containerEl)
       .setName('Write permission')
-      .setDesc('write permission for new notes')
+      .setDesc('Write permission for new notes')
       .addDropdown(dropdown =>
         this.configurePermissionDropdown(
           dropdown,
-          [
-            { value: NotePermissionRole.OWNER, label: 'Owner' },
-            { value: NotePermissionRole.SIGNED_IN, label: 'Signed In Users' },
-            { value: NotePermissionRole.GUEST, label: 'Everyone' },
-          ],
-          this.plugin.settings.writePermission,
-          async (value: NotePermissionRole) => {
-            this.plugin.settings.writePermission = value;
-            await this.plugin.saveData(this.plugin.settings);
+          NotePermissionRole,
+          this.plugin.getSettings().writePermission,
+          async (writePermission: NotePermissionRole) => {
+            await this.plugin.updateSettings({ writePermission });
           }
         )
       );
-  }
 
-  private renderCommentPermissionSetting(): void {
     new Setting(this.containerEl)
       .setName('Comment permission')
-      .setDesc('comment permission for new notes')
+      .setDesc('Comment permission for new notes')
       .addDropdown(dropdown =>
         this.configurePermissionDropdown(
           dropdown,
-          [
-            { value: CommentPermissionType.DISABLED, label: 'Disabled' },
-            { value: CommentPermissionType.FORBIDDEN, label: 'Forbidden' },
-            { value: CommentPermissionType.OWNERS, label: 'Owner' },
-            {
-              value: CommentPermissionType.SIGNED_IN_USERS,
-              label: 'Signed In Users',
-            },
-            { value: CommentPermissionType.EVERYONE, label: 'Everyone' },
-          ],
-          this.plugin.settings.commentPermission,
-          async (value: CommentPermissionType) => {
-            this.plugin.settings.commentPermission = value;
-            await this.plugin.saveData(this.plugin.settings);
+          CommentPermissionType,
+          this.plugin.getSettings().commentPermission,
+          async (commentPermission: CommentPermissionType) => {
+            await this.plugin.updateSettings({ commentPermission });
           }
         )
       );
   }
 
-  // Configure dropdown with permissions options
-  private configurePermissionDropdown<T>(
-    dropdown: any,
-    options: Array<{ value: T; label: string }>,
+  /**
+   * Configures a dropdown component with options from a TypeScript enum.
+   *
+   * @param dropdown - The Obsidian DropdownComponent to configure
+   * @param enumObj - The enum object (e.g., NotePermissionRole or CommentPermissionType)
+   * @param currentValue - The currently selected enum value to pre-select in the dropdown
+   * @param onChange - Callback function that receives the new value when selection changes
+   * @returns The configured dropdown component for method chaining
+   */
+  private configurePermissionDropdown<T extends string>(
+    dropdown: DropdownComponent,
+    enumObj: Record<string, string>,
     currentValue: T,
     onChange: (value: T) => Promise<void>
-  ) {
-    options.forEach(({ value, label }) => {
-      dropdown.addOption(value, label);
-    });
+  ): DropdownComponent {
+    Object.entries(enumObj)
+      // Filter out reverse mappings that TypeScript creates for string enums
+      // In a string enum, TypeScript might create reversed entries like:
+      // { OWNER: 'Owner only', 'Owner only': 'OWNER' }
+      // We only want the OWNER -> 'Owner only' mappings, not the reverse ones
+      .forEach(([key, value]) => {
+        // For each enum entry, add an option to the dropdown where:
+        // - key (e.g., 'OWNER') becomes the internal value stored in settings
+        // - value (e.g., 'Owner only') becomes the display text shown to the user
+        dropdown.addOption(key, value);
+      });
 
+    // Set the current value and wire up the change handler
+    // This makes the dropdown show the current setting and updates it when changed
     return dropdown.setValue(currentValue).onChange(onChange);
   }
 }
