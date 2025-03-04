@@ -27,7 +27,7 @@ export class MockObsidianService implements IObsidianService {
     this.parseYaml.mockImplementation((yaml: string) => {
       try {
         return JSON.parse(yaml);
-      } catch (e) {
+      } catch {
         return {};
       }
     });
@@ -65,12 +65,10 @@ export class MockObsidianService implements IObsidianService {
    * Configure the mock to simulate an API error for a single call
    */
   mockFailedApiResponse(status: number, message: string): void {
-    // Create a properly structured error object with status property
-    const error = {
-      message: message,
-      status: status,
-    };
     // Use mockRejectedValueOnce to make the next call reject with this error
-    this.requestUrl.mockRejectedValueOnce(error);
+    this.requestUrl.mockRejectedValueOnce({
+      message,
+      status,
+    });
   }
 }

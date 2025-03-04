@@ -237,8 +237,6 @@ export class HackMDClient {
 }
 
 export function getIdFromUrl(url: string): string | undefined {
-  if (!url) return undefined;
-
   const match = url.match(/hackmd\.io\/(?:@[^/]+\/)?([a-zA-Z0-9_-]+)/);
   return match ? match[1] : undefined;
 }

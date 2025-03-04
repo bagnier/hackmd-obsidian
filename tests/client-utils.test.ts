@@ -27,14 +27,6 @@ describe('getIdFromUrl', () => {
   it('should handle empty string input', () => {
     expect(getIdFromUrl('')).toBeUndefined();
   });
-
-  it('should handle undefined input', () => {
-    expect(getIdFromUrl(undefined as any)).toBeUndefined();
-  });
-
-  it('should handle null input', () => {
-    expect(getIdFromUrl(null as any)).toBeUndefined();
-  });
 });
 
 describe('getUrlFromId', () => {
