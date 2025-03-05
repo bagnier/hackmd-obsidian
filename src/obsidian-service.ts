@@ -9,6 +9,7 @@ import {
   TFile,
   App,
 } from 'obsidian';
+import { YamlObject } from './types';
 
 /**
  * Abstraction for Obsidian's Editor
@@ -58,13 +59,13 @@ export interface IObsidianService {
    * Parse YAML string to object
    * @param yaml YAML string to parse
    */
-  parseYaml(yaml: string): any;
+  parseYaml(yaml: string): YamlObject;
 
   /**
    * Convert object to YAML string
    * @param object Object to convert to YAML
    */
-  stringifyYaml(object: any): string;
+  stringifyYaml(object: YamlObject): string;
 }
 
 /**
@@ -164,15 +165,15 @@ export class ObsidianService implements IObsidianService {
    * Parse YAML string to object
    * @param yaml YAML string to parse
    */
-  public parseYaml(yaml: string): any {
-    return parseYaml(yaml);
+  public parseYaml(yaml: string): YamlObject {
+    return parseYaml(yaml) as YamlObject;
   }
 
   /**
    * Convert object to YAML string
    * @param object Object to convert to YAML
    */
-  public stringifyYaml(object: any): string {
+  public stringifyYaml(object: YamlObject): string {
     return stringifyYaml(object);
   }
 }

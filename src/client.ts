@@ -1,7 +1,9 @@
 import {
+  ApiError,
   HackMDError,
   HackMDErrorType,
   HackMDNote,
+  HackMDPluginSettings,
   HackMDResponse,
   HackMDUser,
   isHackMDUser,
@@ -12,26 +14,40 @@ import { IObsidianService } from './obsidian-service';
 // Client for interacting with the HackMD API
 export class HackMDClient {
   private readonly baseUrl = 'https://api.hackmd.io/v1';
+  private settings: HackMDPluginSettings;
 
   public constructor(
-    private accessToken: string,
+    settings: HackMDPluginSettings,
     private obsidianService: IObsidianService
-  ) {}
+  ) {
+    this.settings = { ...settings };
+  }
+
+  /**
+   * Updates the client's settings
+   * @param settings The new settings to use
+   */
+  public updateSettings(settings: HackMDPluginSettings): void {
+    this.settings = { ...settings };
+  }
 
   private headers(): Record<string, string> {
     return {
-      Authorization: `Bearer ${this.accessToken}`,
+      Authorization: `Bearer ${this.settings.accessToken}`,
       'Content-Type': 'application/json',
       Accept: 'application/json',
     };
   }
 
-  public async resetInstance(accessToken: string) {
-    if (!accessToken) {
+  /**
+   * Validates that the access token is set and the user is authenticated
+   * @throws HackMDError if the access token is missing
+   */
+  public async validateAuth(): Promise<HackMDUser> {
+    if (!this.settings.accessToken) {
       throw new HackMDError(HackMDErrorType.AUTH_REQUIRED);
     }
-    this.accessToken = accessToken;
-    await this.getMe();
+    return await this.getMe();
   }
 
   /**
@@ -91,7 +107,7 @@ export class HackMDClient {
   }
 
   // Handle API errors with user-friendly HackMDError types
-  private handleApiError(error: any): HackMDError {
+  private handleApiError(error: ApiError): HackMDError {
     // Network or connection errors don't have status
     if (!error.status) {
       return new HackMDError(
@@ -177,9 +193,18 @@ export class HackMDClient {
     );
   }
 
-  // Creates a new note
+  // Creates a new note, applying default permission settings if not specified
   async createNote(options: NoteOptions): Promise<HackMDNote> {
-    const response = await this.request('POST', '/notes', options);
+    // Apply default permissions from settings if not explicitly provided
+    const createOptions: NoteOptions = {
+      ...options,
+      readPermission: options.readPermission ?? this.settings.readPermission,
+      writePermission: options.writePermission ?? this.settings.writePermission,
+      commentPermission:
+        options.commentPermission ?? this.settings.commentPermission,
+    };
+
+    const response = await this.request('POST', '/notes', createOptions);
     if (!response.data) {
       throw new HackMDError(HackMDErrorType.UNKNOWN, 'Failed to create note');
     }

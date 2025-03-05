@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HackMDClient } from '../src/client';
 import { MockObsidianService } from './mocks/obsidian-service.mock';
-import { HackMDErrorType } from '../src/types';
+import { DEFAULT_SETTINGS, HackMDErrorType } from '../src/types';
 
 describe('HackMDClient Error Handling', () => {
   beforeEach(() => {
@@ -77,7 +77,7 @@ describe('HackMDClient Error Handling', () => {
           });
 
         // Create client & test
-        const client = new HackMDClient('test-token', mockObsidianService);
+        const client = new HackMDClient({...DEFAULT_SETTINGS, accessToken: 'test-token'}, mockObsidianService);
         await client.getMe();
 
         await expect(

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HackMDClient } from '../src/client';
 import { MockObsidianService } from './mocks/obsidian-service.mock';
-import { HackMDNote } from '../src/types';
+import { DEFAULT_SETTINGS, HackMDNote } from '../src/types';
 
 /**
  * Style: Integration tests with fixtures
@@ -47,7 +47,7 @@ describe('HackMDClient Integration', () => {
     mockObsidianService.mockSuccessfulApiResponse(fixtures.user);
 
     // Create and authenticate client
-    client = new HackMDClient('test-token', mockObsidianService);
+    client = new HackMDClient({...DEFAULT_SETTINGS, accessToken: 'test-token'}, mockObsidianService);
     await client.getMe();
     mockObsidianService.requestUrl.mockReset();
   });

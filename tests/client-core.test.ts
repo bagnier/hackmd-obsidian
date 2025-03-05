@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HackMDClient } from '../src/client';
 import { MockObsidianService } from './mocks/obsidian-service.mock';
-import { HackMDErrorType } from '../src/types';
+import {
+  CommentPermissionType,
+  HackMDErrorType,
+  HackMDPluginSettings,
+  NotePermissionRole,
+} from '../src/types';
 
 describe('HackMDClient Core', () => {
   // Common configuration
@@ -14,14 +19,22 @@ describe('HackMDClient Core', () => {
     userPath: 'test-path',
   };
 
+  // Default test settings
+  const testSettings: HackMDPluginSettings = {
+    accessToken: 'test-token',
+    readPermission: NotePermissionRole.OWNER,
+    writePermission: NotePermissionRole.OWNER,
+    commentPermission: CommentPermissionType.DISABLED,
+  };
+
   /**
    * Helper to create an authenticated client instance for testing
    */
   async function createAuthenticatedClient(
-    token = 'test-token'
+    settings: HackMDPluginSettings = testSettings
   ): Promise<HackMDClient> {
     mockObsidianService.mockSuccessfulApiResponse(validUserResponse);
-    const client = new HackMDClient(token, mockObsidianService);
+    const client = new HackMDClient(settings, mockObsidianService);
     await client.getMe();
     mockObsidianService.requestUrl.mockReset();
     return client;
@@ -43,10 +56,16 @@ describe('HackMDClient Core', () => {
   describe('authentication', () => {
     it('should throw error when no access token is provided', async () => {
       // GIVEN - a client with empty token
-      const client = new HackMDClient('', mockObsidianService);
+      const client = new HackMDClient(
+        {
+          ...testSettings,
+          accessToken: '',
+        },
+        mockObsidianService
+      );
 
       // WHEN/THEN - attempting to authenticate
-      await expect(client.resetInstance('')).rejects.toMatchObject({
+      await expect(client.validateAuth()).rejects.toMatchObject({
         type: HackMDErrorType.AUTH_REQUIRED,
         message: expect.stringContaining('access token is required'),
       });
@@ -57,7 +76,7 @@ describe('HackMDClient Core', () => {
       mockObsidianService.mockSuccessfulApiResponse(validUserResponse);
 
       // WHEN - instantiating the client
-      const client = new HackMDClient('test-token', mockObsidianService);
+      const client = new HackMDClient(testSettings, mockObsidianService);
 
       // THEN - a valid client instance is created
       expect(client).toBeInstanceOf(HackMDClient);
@@ -69,29 +88,51 @@ describe('HackMDClient Core', () => {
       await expect(client.getNote('test-id')).resolves.not.toThrow();
     });
 
-    it('should allow changing to a different valid token', async () => {
-      // GIVEN - an existing client with first token
-      const client = await createAuthenticatedClient('first-token');
+    it('should allow updating settings', async () => {
+      // GIVEN - an existing client with initial settings
+      const client = await createAuthenticatedClient();
 
-      // AND - prepare successful response for the second request
+      // AND - new settings to apply
+      const newSettings: HackMDPluginSettings = {
+        ...testSettings,
+        accessToken: 'new-token',
+        readPermission: NotePermissionRole.GUEST,
+      };
+
+      // WHEN - updating settings
+      client.updateSettings(newSettings);
+
+      // AND - prepare successful response for the next request
       mockObsidianService.mockSuccessfulApiResponse(validUserResponse);
 
-      // WHEN - resetting instance with a different token
-      await client.resetInstance('second-token');
+      // THEN - validate authentication with new token
+      await client.validateAuth();
 
-      // THEN - the client is updated with new token and remains functional
-      expect(client).toBeInstanceOf(HackMDClient);
-
-      // Verify the client can still perform operations
+      // Verify the client can still perform operations with new token
       mockObsidianService.requestUrl.mockReset();
       mockObsidianService.mockSuccessfulApiResponse({ id: 'test-id' });
       await expect(client.getNote('test-id')).resolves.not.toThrow();
+
+      // Check that authorization header is using the new token
+      expect(mockObsidianService.requestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer new-token',
+          }),
+        })
+      );
     });
 
     it('should throw auth error when API rejects', async () => {
       // GIVEN - a configuration to simulate an authentication error
       mockObsidianService.mockFailedApiResponse(401, 'Invalid token');
-      const client = new HackMDClient('bad-token', mockObsidianService);
+      const client = new HackMDClient(
+        {
+          ...testSettings,
+          accessToken: 'bad-token',
+        },
+        mockObsidianService
+      );
 
       // WHEN/THEN - authentication should fail with the appropriate error details
       await expect(client.getMe()).rejects.toMatchObject({
@@ -104,9 +145,15 @@ describe('HackMDClient Core', () => {
         }),
       });
 
-      // Verify reset behavior by successfully creating another instance
+      // Update settings with a new token
       mockObsidianService.mockSuccessfulApiResponse(validUserResponse);
-      await expect(client.resetInstance('new-token')).resolves.not.toThrow();
+      client.updateSettings({
+        ...testSettings,
+        accessToken: 'new-token',
+      });
+
+      // Should be able to authenticate with new token
+      await expect(client.validateAuth()).resolves.not.toThrow();
     });
   });
 
@@ -172,6 +219,75 @@ describe('HackMDClient Core', () => {
       expect(response2.status).toBe(202);
       expect(response2.ok).toBe(true);
       expect(response2.data).toBeNull();
+    });
+  });
+
+  describe('createNote with permissions', () => {
+    it('should apply default permissions from settings', async () => {
+      // GIVEN - a client with custom permission settings
+      const customSettings = {
+        ...testSettings,
+        readPermission: NotePermissionRole.GUEST,
+        writePermission: NotePermissionRole.SIGNED_IN,
+        commentPermission: CommentPermissionType.EVERYONE,
+      };
+
+      const client = new HackMDClient(customSettings, mockObsidianService);
+
+      // Mock successful response
+      mockObsidianService.mockSuccessfulApiResponse({
+        id: 'new-note-id',
+        title: 'Test Note',
+        content: '# Test Content',
+        createdAt: new Date().toISOString(),
+      });
+
+      // WHEN - creating a note without explicit permissions
+      await client.createNote({
+        title: 'Test Note',
+        content: '# Test Content',
+      });
+
+      // THEN - the client should use permissions from settings
+      expect(mockObsidianService.requestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body:
+            expect.stringContaining('"readPermission":"Guest"') &&
+            expect.stringContaining('"writePermission":"Signed in Users"') &&
+            expect.stringContaining('"commentPermission":"everyone"'),
+        })
+      );
+    });
+
+    it('should use explicitly provided permissions over defaults', async () => {
+      // GIVEN - a client with default permission settings
+      const client = await createAuthenticatedClient();
+
+      // Mock successful response
+      mockObsidianService.mockSuccessfulApiResponse({
+        id: 'new-note-id',
+        title: 'Test Note',
+        content: '# Test Content',
+        createdAt: new Date().toISOString(),
+      });
+
+      // WHEN - creating a note with explicit permissions
+      await client.createNote({
+        title: 'Test Note',
+        content: '# Test Content',
+        readPermission: NotePermissionRole.GUEST,
+        writePermission: NotePermissionRole.SIGNED_IN,
+      });
+
+      // THEN - the client should use the explicitly provided permissions
+      expect(mockObsidianService.requestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body:
+            expect.stringContaining('"readPermission":"Guest"') &&
+            expect.stringContaining('"writePermission":"Signed in Users"') &&
+            expect.stringContaining('"commentPermission":"Disabled"'),
+        })
+      );
     });
   });
 });

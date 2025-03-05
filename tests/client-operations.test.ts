@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HackMDClient } from '../src/client';
 import { MockObsidianService } from './mocks/obsidian-service.mock';
-import { HackMDErrorType } from '../src/types';
+import { DEFAULT_SETTINGS, HackMDErrorType } from '../src/types';
 
 describe('HackMDClient Operations', () => {
   // Common configuration
@@ -28,7 +28,7 @@ describe('HackMDClient Operations', () => {
     token = 'test-token'
   ): Promise<HackMDClient> {
     mockObsidianService.mockSuccessfulApiResponse(validUserResponse);
-    const client = new HackMDClient(token, mockObsidianService);
+    const client = new HackMDClient({...DEFAULT_SETTINGS, accessToken: token}, mockObsidianService);
     await client.getMe();
     mockObsidianService.requestUrl.mockReset();
     return client;

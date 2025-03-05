@@ -9,8 +9,14 @@ export interface HackMDMetadata {
 }
 
 // Note frontmatter structure
+export type YamlValue = string | number | boolean | null | undefined | YamlObject | YamlValue[];
+
+export interface YamlObject {
+  [key: string]: YamlValue;
+}
+
 export interface NoteFrontmatter extends Partial<HackMDMetadata> {
-  [key: string]: any;
+  [key: string]: YamlValue;
 }
 
 export interface SyncPrepareResult {
@@ -97,7 +103,7 @@ export interface ModalConfig {
 // Type guards
 export function isHackMDMetadata(
   value: NoteFrontmatter
-): value is HackMDMetadata {
+): value is (NoteFrontmatter & Required<HackMDMetadata>) {
   return 'url' in value && 'title' in value && 'lastSync' in value;
 }
 
@@ -145,16 +151,27 @@ export enum HackMDErrorType {
   UNKNOWN = 'An unknown error occurred.',
 }
 
+// Interface for API error responses
+export interface ApiError {
+  status?: number;
+  message?: string;
+  response?: {
+    status: number;
+    data?: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export class HackMDError extends Error {
   public type: HackMDErrorType;
   public statusCode?: number;
-  public originalError?: any;
+  public originalError?: ApiError;
 
   constructor(
     type: HackMDErrorType = HackMDErrorType.UNKNOWN,
     message?: string,
     statusCode?: number,
-    originalError?: any
+    originalError?: ApiError
   ) {
     // Use provided message or the message embedded in the enum
     super(message || type);
