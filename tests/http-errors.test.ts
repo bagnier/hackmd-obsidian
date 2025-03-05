@@ -1,14 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HackMDClient } from '../src/client';
 import { MockObsidianService } from './mocks/obsidian-service.mock';
 import { HackMDErrorType } from '../src/types';
 
 describe('HackMDClient Error Handling', () => {
-  // Avant chaque test, nous allons réinitialiser l'instance singleton pour éviter la contamination entre tests
   beforeEach(() => {
-    // Force reset of client instance to avoid test pollution
-    // @ts-ignore - Access static method even if private
-    HackMDClient.resetInstance();
     vi.resetAllMocks();
   });
 
@@ -81,10 +77,8 @@ describe('HackMDClient Error Handling', () => {
           });
 
         // Create client & test
-        const client = await HackMDClient.getInstance(
-          'test-token',
-          mockObsidianService
-        );
+        const client = new HackMDClient('test-token', mockObsidianService);
+        await client.getMe();
 
         await expect(
           client.request('GET', '/api/endpoint')

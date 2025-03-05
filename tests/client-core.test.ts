@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HackMDClient } from '../src/client';
 import { MockObsidianService } from './mocks/obsidian-service.mock';
 import { HackMDErrorType } from '../src/types';
@@ -21,7 +21,8 @@ describe('HackMDClient Core', () => {
     token = 'test-token'
   ): Promise<HackMDClient> {
     mockObsidianService.mockSuccessfulApiResponse(validUserResponse);
-    const client = await HackMDClient.getInstance(token, mockObsidianService);
+    const client = new HackMDClient(token, mockObsidianService);
+    await client.getMe();
     mockObsidianService.requestUrl.mockReset();
     return client;
   }
@@ -29,9 +30,6 @@ describe('HackMDClient Core', () => {
   beforeEach(async () => {
     // Create a new mock service instance
     mockObsidianService = new MockObsidianService();
-
-    // Explicitly reset the HackMDClient singleton
-    HackMDClient.resetInstance();
 
     // Reset all mocks
     vi.resetAllMocks();
@@ -42,76 +40,61 @@ describe('HackMDClient Core', () => {
     vi.resetAllMocks();
   });
 
-  describe('getInstance', () => {
+  describe('authentication', () => {
     it('should throw error when no access token is provided', async () => {
-      await expect(
-        HackMDClient.getInstance('', mockObsidianService)
-      ).rejects.toMatchObject({
+      // GIVEN - a client with empty token
+      const client = new HackMDClient('', mockObsidianService);
+
+      // WHEN/THEN - attempting to authenticate
+      await expect(client.resetInstance('')).rejects.toMatchObject({
         type: HackMDErrorType.AUTH_REQUIRED,
         message: expect.stringContaining('access token is required'),
       });
     });
 
-    it('should create a new instance with valid token', async () => {
+    it('should create a valid instance with token', async () => {
       // GIVEN - a configuration to simulate a successful response
       mockObsidianService.mockSuccessfulApiResponse(validUserResponse);
 
       // WHEN - instantiating the client
-      const client = await HackMDClient.getInstance(
-        'test-token',
-        mockObsidianService
-      );
+      const client = new HackMDClient('test-token', mockObsidianService);
 
       // THEN - a valid client instance is created
       expect(client).toBeInstanceOf(HackMDClient);
 
       // Verify behavior: client can be used to perform operations
+      await client.getMe();
       mockObsidianService.requestUrl.mockReset();
       mockObsidianService.mockSuccessfulApiResponse({ id: 'test-id' });
       await expect(client.getNote('test-id')).resolves.not.toThrow();
     });
 
-    it('should reuse existing instance with same token', async () => {
-      // GIVEN - an existing instance
-      const instance1 = await createAuthenticatedClient('same-token');
-
-      // WHEN - requesting a new instance with the same token
-      const instance2 = await HackMDClient.getInstance(
-        'same-token',
-        mockObsidianService
-      );
-
-      // THEN - the same instance is returned and API not called again
-      expect(instance1).toBe(instance2);
-      expect(mockObsidianService.requestUrl).not.toHaveBeenCalled();
-    });
-
-    it('should create a new instance when using a different valid token', async () => {
-      // GIVEN - an existing instance with first token
-      const instance1 = await createAuthenticatedClient('first-token');
+    it('should allow changing to a different valid token', async () => {
+      // GIVEN - an existing client with first token
+      const client = await createAuthenticatedClient('first-token');
 
       // AND - prepare successful response for the second request
       mockObsidianService.mockSuccessfulApiResponse(validUserResponse);
 
-      // WHEN - requesting a new instance with a different token
-      const instance2 = await HackMDClient.getInstance(
-        'second-token',
-        mockObsidianService
-      );
+      // WHEN - resetting instance with a different token
+      await client.resetInstance('second-token');
 
-      // THEN - a new instance is created
-      expect(instance2).toBeInstanceOf(HackMDClient);
-      expect(instance1).not.toBe(instance2);
+      // THEN - the client is updated with new token and remains functional
+      expect(client).toBeInstanceOf(HackMDClient);
+
+      // Verify the client can still perform operations
+      mockObsidianService.requestUrl.mockReset();
+      mockObsidianService.mockSuccessfulApiResponse({ id: 'test-id' });
+      await expect(client.getNote('test-id')).resolves.not.toThrow();
     });
 
     it('should throw auth error when API rejects', async () => {
       // GIVEN - a configuration to simulate an authentication error
       mockObsidianService.mockFailedApiResponse(401, 'Invalid token');
+      const client = new HackMDClient('bad-token', mockObsidianService);
 
-      // WHEN/THEN - creation should fail with the appropriate error details
-      await expect(
-        HackMDClient.getInstance('bad-token', mockObsidianService)
-      ).rejects.toMatchObject({
+      // WHEN/THEN - authentication should fail with the appropriate error details
+      await expect(client.getMe()).rejects.toMatchObject({
         type: HackMDErrorType.AUTH_INVALID,
         message: expect.stringContaining('token appears to be invalid'),
         statusCode: 401,
@@ -121,9 +104,9 @@ describe('HackMDClient Core', () => {
         }),
       });
 
-      // Verify reset behavior by trying to create another instance
-      const newInstance = await createAuthenticatedClient('new-token');
-      expect(newInstance).toBeInstanceOf(HackMDClient);
+      // Verify reset behavior by successfully creating another instance
+      mockObsidianService.mockSuccessfulApiResponse(validUserResponse);
+      await expect(client.resetInstance('new-token')).resolves.not.toThrow();
     });
   });
 
@@ -156,42 +139,39 @@ describe('HackMDClient Core', () => {
   });
 
   describe('request', () => {
-    it('should transform 202 Accepted responses into standardized response objects', async () => {
+    it('should handle asynchronous operations with 202 status codes', async () => {
       // GIVEN - a preconfigured client
       const client = await createAuthenticatedClient();
 
-      // Mock 202 Accepted response with empty text
+      // AND - an asynchronous operation response
       mockObsidianService.requestUrl.mockResolvedValueOnce({
         status: 202,
         text: '',
       });
 
-      // WHEN - making request that returns 202
+      // WHEN - we perform an operation that will be processed asynchronously
       const response = await client.request('POST', '/test-accepted');
 
-      // THEN - should provide correct response structure
-      expect(response).toEqual({
-        status: 202,
-        data: null,
-        ok: true,
-      });
+      // THEN - we receive a standardized response indicating the request was accepted
+      expect(response.status).toBe(202);
+      expect(response.ok).toBe(true);
+      expect(response.data).toBeNull();
 
-      // Explicitly forcing coverage for line 89 by ensuring we test the exact path
+      // WHEN - we receive a 202 response with a body (unusual but possible)
       mockObsidianService.requestUrl.mockResolvedValueOnce({
         status: 202,
         text: 'some-text',
       });
 
-      // Test the exact condition
       const response2 = await client.request(
         'POST',
         '/test-accepted-with-body'
       );
 
-      // Should still return the standard 202 response object
+      // THEN - the response still follows the standardized format
       expect(response2.status).toBe(202);
-      expect(response2.data).toBeNull();
       expect(response2.ok).toBe(true);
+      expect(response2.data).toBeNull();
     });
   });
 });

@@ -11,48 +11,27 @@ import { IObsidianService } from './obsidian-service';
 
 // Client for interacting with the HackMD API
 export class HackMDClient {
-  private static instance: HackMDClient;
-  private static accessToken: string;
   private readonly baseUrl = 'https://api.hackmd.io/v1';
-  private readonly headers: Record<string, string>;
-  private obsidianService: IObsidianService;
 
-  private constructor(accessToken: string, obsidianService: IObsidianService) {
-    this.obsidianService = obsidianService;
-    this.headers = {
-      Authorization: `Bearer ${accessToken}`,
+  public constructor(
+    private accessToken: string,
+    private obsidianService: IObsidianService
+  ) {}
+
+  private headers(): Record<string, string> {
+    return {
+      Authorization: `Bearer ${this.accessToken}`,
       'Content-Type': 'application/json',
       Accept: 'application/json',
     };
   }
 
-  public static async getInstance(
-    accessToken: string,
-    obsidianService: IObsidianService
-  ): Promise<HackMDClient> {
+  public async resetInstance(accessToken: string) {
     if (!accessToken) {
       throw new HackMDError(HackMDErrorType.AUTH_REQUIRED);
     }
-
-    if (HackMDClient.instance && HackMDClient.accessToken === accessToken) {
-      return HackMDClient.instance;
-    }
-    HackMDClient.instance = new HackMDClient(accessToken, obsidianService);
-    HackMDClient.accessToken = accessToken;
-
-    try {
-      await HackMDClient.instance.getMe(); // Verify token works
-    } catch (error) {
-      // Reset instance because token is invalid
-      HackMDClient.resetInstance();
-      throw error; // Rethrow to be handled by caller
-    }
-
-    return HackMDClient.instance;
-  }
-
-  public static resetInstance(): void {
-    HackMDClient.accessToken = '';
+    this.accessToken = accessToken;
+    await this.getMe();
   }
 
   /**
@@ -73,7 +52,7 @@ export class HackMDClient {
         url,
         method,
         headers: {
-          ...this.headers,
+          ...this.headers(),
           'Content-Type': 'application/json',
         },
         body: data ? JSON.stringify(data) : undefined,

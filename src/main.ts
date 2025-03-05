@@ -16,6 +16,7 @@ import {
   HackMDNote,
   HackMDPluginSettings,
   NoteFrontmatter,
+  SYNC_TIME_MARGIN,
   SyncMode,
   SyncPrepareResult,
   UpdateLocalNoteParams,
@@ -23,6 +24,10 @@ import {
 
 export default class HackMDPlugin extends Plugin {
   private settings: HackMDPluginSettings;
+  private obsidianService: IObsidianService;
+  private commands: Commands;
+  private hackMDClient: HackMDClient;
+
   public getSettings(): HackMDPluginSettings {
     return this.settings;
   }
@@ -33,43 +38,45 @@ export default class HackMDPlugin extends Plugin {
       ...value,
     };
     await this.saveData(this.settings);
-    HackMDClient.resetInstance();
+    this.hackMDClient.resetInstance(this.settings.accessToken);
   }
-
-  private readonly SYNC_TIME_MARGIN = 4000;
-  private obsidianService: IObsidianService;
 
   async onload() {
     this.obsidianService = new ObsidianService(this.app);
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    this.hackMDClient = new HackMDClient(
+      this.settings.accessToken,
+      this.obsidianService
+    );
+    this.commands = new Commands(this, this.obsidianService, this.hackMDClient);
     this.registerEditorCommands();
     this.registerCreateFromHackMDCommand();
     this.addSettingTab(new HackMDSettingTab(this.app, this));
   }
 
   private registerEditorCommands(): void {
-    const commands = [
+    const editorCommands = [
       {
         name: 'Push',
-        callback: this.pushToHackMD.bind(this),
+        callback: this.commands.pushToHackMD.bind(this.commands),
       },
       {
         name: 'Pull',
-        callback: this.pullFromHackMD.bind(this),
+        callback: this.commands.pullFromHackMD.bind(this.commands),
       },
       {
         name: 'Force Push',
         callback: (editor: IEditor, file: IFile) =>
-          this.pushToHackMD(editor, file, 'force'),
+          this.commands.pushToHackMD(editor, file, 'force'),
       },
       {
         name: 'Force Pull',
         callback: (editor: IEditor, file: IFile) =>
-          this.pullFromHackMD(editor, file, 'force'),
+          this.commands.pullFromHackMD(editor, file, 'force'),
       },
       {
         name: 'Copy URL',
-        callback: this.copyHackMDUrl.bind(this),
+        callback: this.commands.copyHackMDUrl.bind(this.commands),
       },
       {
         name: 'Delete Remote',
@@ -77,7 +84,7 @@ export default class HackMDPlugin extends Plugin {
       },
     ];
 
-    for (const command of commands) {
+    for (const command of editorCommands) {
       this.addCommand({
         id: command.name.toLowerCase().replace(/ /g, '-'),
         name: command.name,
@@ -111,6 +118,18 @@ export default class HackMDPlugin extends Plugin {
     });
   }
 
+  public async promptAndCreateNote(): Promise<void> {
+    const url = await new Promise<string | null>(resolve => {
+      ModalFactory.createUrlPromptModal(this.app, async value => {
+        resolve(value);
+      }).open();
+    });
+
+    if (url) {
+      await this.commands.createNoteFromHackMDUrl(url);
+    }
+  }
+
   private createNonEditorCallback<T extends () => Promise<void>>(callback: T) {
     return async () => {
       try {
@@ -131,19 +150,28 @@ export default class HackMDPlugin extends Plugin {
     }
   }
 
-  private async getClient(): Promise<HackMDClient> {
-    return HackMDClient.getInstance(
-      this.settings.accessToken,
-      this.obsidianService
+  private async deleteHackMDNote(editor: IEditor, file: IFile): Promise<void> {
+    const modal = ModalFactory.createDeleteModal(
+      this.app,
+      file.basename,
+      this.commands.delete(editor).bind(this.commands)
     );
+    modal.open();
   }
+}
 
-  private async pushToHackMD(
+class Commands {
+  constructor(
+    private plugin: HackMDPlugin,
+    private obsidianService: IObsidianService,
+    private hackMDClient: HackMDClient
+  ) {}
+
+  public async pushToHackMD(
     editor: IEditor,
     file: IFile,
     mode: SyncMode = 'normal'
   ): Promise<void> {
-    const client = await this.getClient();
     const { content, noteId } = await this.prepareSync(editor);
     let result;
 
@@ -151,7 +179,7 @@ export default class HackMDPlugin extends Plugin {
       if (mode === 'normal') {
         await this.checkPushConflicts(file, noteId);
       }
-      result = await client.updateNote(noteId, { content });
+      result = await this.hackMDClient.updateNote(noteId, { content });
     } else {
       result = await this.pushNewNote(editor, file, content);
     }
@@ -180,7 +208,6 @@ export default class HackMDPlugin extends Plugin {
     file: IFile,
     content: string
   ): Promise<HackMDNote> {
-    const client = await this.getClient();
     const { frontmatter } = this.getFrontmatter(content);
 
     const newFrontmatter: NoteFrontmatter = {
@@ -189,11 +216,11 @@ export default class HackMDPlugin extends Plugin {
     };
 
     const contentWithTitle = this.combine(newFrontmatter, content);
-    return client.createNote({
+    return this.hackMDClient.createNote({
       content: contentWithTitle,
-      readPermission: this.settings.readPermission,
-      writePermission: this.settings.writePermission,
-      commentPermission: this.settings.commentPermission,
+      readPermission: this.plugin.getSettings().readPermission,
+      writePermission: this.plugin.getSettings().writePermission,
+      commentPermission: this.plugin.getSettings().commentPermission,
     });
   }
 
@@ -266,18 +293,6 @@ export default class HackMDPlugin extends Plugin {
     this.obsidianService.notifyUser(`Note created: ${fileName}`);
   }
 
-  private async promptAndCreateNote(): Promise<void> {
-    const url = await new Promise<string | null>(resolve => {
-      ModalFactory.createUrlPromptModal(this.app, async value => {
-        resolve(value);
-      }).open();
-    });
-
-    if (url) {
-      await this.createNoteFromHackMDUrl(url);
-    }
-  }
-
   /**
    * Creates a note from a HackMD URL
    * @param url The HackMD URL to import
@@ -299,8 +314,7 @@ export default class HackMDPlugin extends Plugin {
     }
 
     // Get note data
-    const client = await this.getClient();
-    const noteData = await client.getNote(noteId);
+    const noteData = await (await this.hackMDClient).getNote(noteId);
     const noteTitle = noteData.title || 'Untitled';
     const noteContent = noteData.content || '';
 
@@ -327,12 +341,11 @@ export default class HackMDPlugin extends Plugin {
     return this.obsidianService.findFileByUrlProperty(searchUrl);
   }
 
-  private async pullFromHackMD(
+  public async pullFromHackMD(
     editor: IEditor,
     file: IFile,
     mode: SyncMode = 'normal'
   ): Promise<void> {
-    const client = await this.getClient();
     const { noteId } = await this.prepareSync(editor);
 
     if (!noteId) {
@@ -343,7 +356,7 @@ export default class HackMDPlugin extends Plugin {
       await this.checkPullConflicts(file);
     }
 
-    const note = await client.getNote(noteId);
+    const note = await (await this.hackMDClient).getNote(noteId);
     const updatedMetadata: Partial<HackMDMetadata> = {
       url: getUrlFromId(note.id),
       title: note.title || file.basename,
@@ -363,7 +376,7 @@ export default class HackMDPlugin extends Plugin {
     this.obsidianService.notifyUser('Successfully pulled from HackMD!');
   }
 
-  private async copyHackMDUrl(editor: IEditor): Promise<void> {
+  public async copyHackMDUrl(editor: IEditor): Promise<void> {
     const { noteId } = await this.prepareSync(editor);
 
     if (!noteId) {
@@ -374,28 +387,22 @@ export default class HackMDPlugin extends Plugin {
     this.obsidianService.notifyUser('HackMD URL copied to clipboard!');
   }
 
-  private async deleteHackMDNote(editor: IEditor, file: IFile): Promise<void> {
-    const client = await this.getClient();
-    const { frontmatter } = await this.prepareSync(editor);
-    const noteId = frontmatter?.url ? getIdFromUrl(frontmatter.url) : undefined;
+  public delete(editor: IEditor) {
+    return async () => {
+      const { frontmatter } = await this.prepareSync(editor);
+      const noteId = frontmatter?.url
+        ? getIdFromUrl(frontmatter.url)
+        : undefined;
 
-    if (!noteId) {
-      throw new HackMDError(HackMDErrorType.SYNC_NOT_LINKED);
-    }
-
-    const modal = ModalFactory.createDeleteModal(
-      this.app,
-      file.basename,
-      async () => {
-        await client.deleteNote(noteId);
-        await this.cleanupHackMDMetadata(editor);
-        this.obsidianService.notifyUser(
-          'Successfully unlinked note from HackMD!'
-        );
+      if (!noteId) {
+        throw new HackMDError(HackMDErrorType.SYNC_NOT_LINKED);
       }
-    );
-
-    modal.open();
+      await (await this.hackMDClient).deleteNote(noteId);
+      await this.cleanupHackMDMetadata(editor);
+      this.obsidianService.notifyUser(
+        'Successfully unlinked note from HackMD!'
+      );
+    };
   }
 
   private async prepareSync(editor: IEditor): Promise<SyncPrepareResult> {
@@ -429,8 +436,7 @@ export default class HackMDPlugin extends Plugin {
   }
 
   private async checkPushConflicts(file: IFile, noteId: string): Promise<void> {
-    const client = await this.getClient();
-    const note = await client.getNote(noteId);
+    const note = await this.hackMDClient.getNote(noteId);
     const content = await this.obsidianService.readFile(file);
     const { frontmatter } = this.getFrontmatter(content);
     const lastSyncStr = frontmatter?.lastSync;
@@ -444,7 +450,7 @@ export default class HackMDPlugin extends Plugin {
       note.lastChangedAt || note.createdAt
     ).getTime();
 
-    if (lastSyncTime - remoteModTime > this.SYNC_TIME_MARGIN) {
+    if (lastSyncTime - remoteModTime > SYNC_TIME_MARGIN) {
       throw new HackMDError(HackMDErrorType.SYNC_CONFLICT_REMOTE);
     }
   }
@@ -461,7 +467,7 @@ export default class HackMDPlugin extends Plugin {
     const lastSyncTime = new Date(lastSyncStr).getTime();
     const localModTime = file.mtime;
 
-    if (localModTime - lastSyncTime > this.SYNC_TIME_MARGIN) {
+    if (localModTime - lastSyncTime > SYNC_TIME_MARGIN) {
       throw new HackMDError(HackMDErrorType.SYNC_CONFLICT_LOCAL);
     }
   }
@@ -494,7 +500,6 @@ export default class HackMDPlugin extends Plugin {
         : noteContent;
 
     editor.setValue(updatedContent);
-    await this.saveData(this.settings);
   }
 
   private async cleanupHackMDMetadata(editor: IEditor): Promise<void> {

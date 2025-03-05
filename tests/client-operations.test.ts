@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HackMDClient } from '../src/client';
 import { MockObsidianService } from './mocks/obsidian-service.mock';
 import { HackMDErrorType } from '../src/types';
@@ -28,7 +28,8 @@ describe('HackMDClient Operations', () => {
     token = 'test-token'
   ): Promise<HackMDClient> {
     mockObsidianService.mockSuccessfulApiResponse(validUserResponse);
-    const client = await HackMDClient.getInstance(token, mockObsidianService);
+    const client = new HackMDClient(token, mockObsidianService);
+    await client.getMe();
     mockObsidianService.requestUrl.mockReset();
     return client;
   }
@@ -36,9 +37,6 @@ describe('HackMDClient Operations', () => {
   beforeEach(async () => {
     // Create a new mock service instance
     mockObsidianService = new MockObsidianService();
-
-    // Explicitly reset the HackMDClient singleton
-    HackMDClient.resetInstance();
 
     // Reset all mocks
     vi.resetAllMocks();
@@ -198,35 +196,34 @@ describe('HackMDClient Operations', () => {
       expect(result).toEqual(updatedNote);
     });
 
-    it('should handle 202 status (delayed update)', async () => {
+    it('should handle asynchronous processing (202 Accepted)', async () => {
       // GIVEN - a preconfigured client
       const client = await createAuthenticatedClient();
 
-      // Mock a 202 response (accepted but processing) followed by successful get
+      // AND - an asynchronous update scenario where changes are processed later
+      const updatedNoteData = {
+        ...mockNote,
+        title: 'Delayed Update',
+      };
+
+      // First call returns 202 (processing), second call returns updated note
       mockObsidianService.requestUrl
-        .mockResolvedValueOnce({
-          status: 202,
-          text: '',
-        })
+        .mockResolvedValueOnce({ status: 202, text: '' })
         .mockResolvedValueOnce({
           status: 200,
-          json: {
-            ...mockNote,
-            title: 'Delayed Update',
-          },
-          text: JSON.stringify({
-            ...mockNote,
-            title: 'Delayed Update',
-          }),
+          json: updatedNoteData,
+          text: JSON.stringify(updatedNoteData),
         });
 
-      // WHEN - updating the note
+      // WHEN - we update a note that requires background processing
       const result = await client.updateNote('note-id', {
         title: 'Delayed Update',
       });
 
-      // THEN - the note should eventually be updated via getNote
-      expect(result.title).toBe('Delayed Update');
+      // THEN - we eventually get the updated note data
+      expect(result).toHaveProperty('id', mockNote.id);
+      expect(result).toHaveProperty('title', 'Delayed Update');
+      expect(result).toHaveProperty('content', mockNote.content);
     });
 
     it('should throw error when update data is invalid', async () => {
@@ -264,20 +261,21 @@ describe('HackMDClient Operations', () => {
       expect(result).toBe(true);
     });
 
-    it('should return true when note was already deleted', async () => {
+    it('should report success when deleting an already deleted note', async () => {
       // GIVEN - a preconfigured client
       const client = await createAuthenticatedClient();
 
-      // Mock 404 response for already deleted note
+      // AND - a situation where the note is already gone
       mockObsidianService.requestUrl.mockRejectedValueOnce({
         status: 404,
         message: 'Note not found',
       });
 
-      // WHEN - trying to delete a non-existent note
+      // WHEN - we try to delete a note that doesn't exist
       const result = await client.deleteNote('deleted-note-id');
 
-      // THEN - should still return success
+      // THEN - the operation is still considered successful
+      // because the end state is what we wanted (note doesn't exist)
       expect(result).toBe(true);
     });
   });

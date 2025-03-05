@@ -166,12 +166,7 @@ export class HackMDError extends Error {
   }
 }
 
-// Plugin constants
-export const CONSTANTS = {
-  MIN_SYNC_INTERVAL: 1000,
-  DEFAULT_TIMEOUT: 10000,
-  MAX_RETRIES: 3,
-} as const;
+export const SYNC_TIME_MARGIN = 4000;
 
 export type SyncDirection = 'push' | 'pull';
 export type SyncMode = 'normal' | 'force';
