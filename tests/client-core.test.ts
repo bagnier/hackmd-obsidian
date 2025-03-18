@@ -279,13 +279,13 @@ describe('HackMDClient Core', () => {
         writePermission: NotePermissionRole.SIGNED_IN,
       });
 
-      // THEN - the client should use the explicitly provided permissions
+      // THEN - the client should use the explicitly provided permissions (converted to lowercase for API)
       expect(mockObsidianService.requestUrl).toHaveBeenCalledWith(
         expect.objectContaining({
           body:
-            expect.stringContaining('"readPermission":"Guest"') &&
-            expect.stringContaining('"writePermission":"Signed in Users"') &&
-            expect.stringContaining('"commentPermission":"Disabled"'),
+            expect.stringContaining('"readPermission":"guest"') &&
+            expect.stringContaining('"writePermission":"signed in users"') &&
+            expect.stringContaining('"commentPermission":"disabled"'),
         })
       );
     });

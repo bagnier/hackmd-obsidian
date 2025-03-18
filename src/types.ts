@@ -9,7 +9,14 @@ export interface HackMDMetadata {
 }
 
 // Note frontmatter structure
-export type YamlValue = string | number | boolean | null | undefined | YamlObject | YamlValue[];
+export type YamlValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | YamlObject
+  | YamlValue[];
 
 export interface YamlObject {
   [key: string]: YamlValue;
@@ -64,7 +71,7 @@ export enum CommentPermissionType {
   FORBIDDEN = 'Forbidden',
   OWNERS = 'Owners only',
   SIGNED_IN_USERS = 'Signed in Users',
-  EVERYONE = 'everyone',
+  EVERYONE = 'Everyone',
 }
 
 // Only the options we actually send to the API
@@ -103,7 +110,7 @@ export interface ModalConfig {
 // Type guards
 export function isHackMDMetadata(
   value: NoteFrontmatter
-): value is (NoteFrontmatter & Required<HackMDMetadata>) {
+): value is NoteFrontmatter & Required<HackMDMetadata> {
   return 'url' in value && 'title' in value && 'lastSync' in value;
 }
 

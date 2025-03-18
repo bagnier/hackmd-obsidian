@@ -86,11 +86,13 @@ export class HackMDSettingTab extends PluginSettingTab {
     currentValue: T,
     onChange: (value: T) => Promise<void>
   ): DropdownComponent {
+    // Filter out numeric keys (TypeScript enum reverse mappings)
     Object.entries(enumObj)
       // Filter out reverse mappings that TypeScript creates for string enums
       // In a string enum, TypeScript might create reversed entries like:
       // { OWNER: 'Owner only', 'Owner only': 'OWNER' }
       // We only want the OWNER -> 'Owner only' mappings, not the reverse ones
+      .filter(([key]) => isNaN(Number(key)))
       .forEach(([key, value]) => {
         // For each enum entry, add an option to the dropdown where:
         // - key (e.g., 'OWNER') becomes the internal value stored in settings
@@ -99,7 +101,6 @@ export class HackMDSettingTab extends PluginSettingTab {
       });
 
     // Set the current value and wire up the change handler
-    // This makes the dropdown show the current setting and updates it when changed
     return dropdown.setValue(currentValue).onChange(onChange);
   }
 }

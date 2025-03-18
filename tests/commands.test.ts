@@ -12,11 +12,11 @@ import {
 import { getIdFromUrl, getUrlFromId } from '../src/client';
 
 // Mock the client module
-vi.mock('../src/client', async (importOriginal) => {
-  const actual = await importOriginal() as typeof import('../src/client');
+vi.mock('../src/client', async importOriginal => {
+  const actual = (await importOriginal()) as typeof import('../src/client');
   return {
     ...actual,
-    HackMDClient: vi.fn()
+    HackMDClient: vi.fn(),
   };
 });
 
@@ -155,7 +155,6 @@ lastSync: ${new Date(Date.now() - SYNC_TIME_MARGIN * 2).toISOString()}
       // Mock updateNote to return a valid response
       mockHackMDClient.updateNote.mockResolvedValue({
         id: 'existing-note-id',
-        title: 'Test Note Updated',
         content: contentWithoutFrontmatter,
         createdAt: new Date().toISOString(),
       });
@@ -166,7 +165,7 @@ lastSync: ${new Date(Date.now() - SYNC_TIME_MARGIN * 2).toISOString()}
       // Verify
       expect(mockHackMDClient.updateNote).toHaveBeenCalledWith(
         'existing-note-id',
-        { content: expect.any(String) }
+        expect.any(String)
       );
       expect(mockEditor.setValue).toHaveBeenCalled();
       expect(mockObsidianService.notifyUser).toHaveBeenCalledWith(
@@ -261,7 +260,7 @@ lastSync: ${lastSyncDate.toISOString()}
       // Verify
       expect(mockHackMDClient.updateNote).toHaveBeenCalledWith(
         'existing-note-id',
-        { content: expect.any(String) }
+        expect.any(String)
       );
       expect(mockEditor.setValue).toHaveBeenCalled();
       expect(mockObsidianService.notifyUser).toHaveBeenCalledWith(

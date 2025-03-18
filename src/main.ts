@@ -26,7 +26,9 @@ export default class HackMDPlugin extends Plugin {
     return this.settings;
   }
 
-  public async updateSettings(value: Partial<HackMDPluginSettings>): Promise<void> {
+  public async updateSettings(
+    value: Partial<HackMDPluginSettings>
+  ): Promise<void> {
     this.settings = {
       ...this.settings,
       ...value,
@@ -94,9 +96,13 @@ export default class HackMDPlugin extends Plugin {
     }
   }
 
-  private createEditorCallback<T extends (editor: IEditor, file: IFile, ...rest: unknown[]) => Promise<void>>(
-    callback: T
-  ) {
+  private createEditorCallback<
+    T extends (
+      editor: IEditor,
+      file: IFile,
+      ...rest: unknown[]
+    ) => Promise<void>,
+  >(callback: T) {
     return async (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
       try {
         if (!(ctx instanceof MarkdownView) || !ctx.file) {
@@ -149,7 +155,9 @@ export default class HackMDPlugin extends Plugin {
     } else if (error instanceof Error) {
       this.obsidianService.notifyUser(`Operation failed: ${error.message}`);
     } else {
-      this.obsidianService.notifyUser('Operation failed due to an unknown error');
+      this.obsidianService.notifyUser(
+        'Operation failed due to an unknown error'
+      );
     }
   }
 

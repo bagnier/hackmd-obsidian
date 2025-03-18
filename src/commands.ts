@@ -30,7 +30,7 @@ export class Commands {
       if (mode === 'normal') {
         await this.checkPushConflicts(file, noteId);
       }
-      result = await this.hackMDClient.updateNote(noteId, { content });
+      result = await this.hackMDClient.updateNote(noteId, content);
     } else {
       result = await this.pushNewNote(editor, file, content);
     }

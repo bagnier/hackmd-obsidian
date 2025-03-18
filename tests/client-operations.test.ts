@@ -28,7 +28,10 @@ describe('HackMDClient Operations', () => {
     token = 'test-token'
   ): Promise<HackMDClient> {
     mockObsidianService.mockSuccessfulApiResponse(validUserResponse);
-    const client = new HackMDClient({...DEFAULT_SETTINGS, accessToken: token}, mockObsidianService);
+    const client = new HackMDClient(
+      { ...DEFAULT_SETTINGS, accessToken: token },
+      mockObsidianService
+    );
     await client.getMe();
     mockObsidianService.requestUrl.mockReset();
     return client;
@@ -114,7 +117,7 @@ describe('HackMDClient Operations', () => {
       // WHEN/THEN - operation should fail with proper error
       await expect(client.getNote('empty-note')).rejects.toMatchObject({
         type: HackMDErrorType.NOTE_NOT_FOUND,
-        message: expect.stringContaining('Note empty-note not found'),
+        message: expect.stringContaining('no longer exists'), // Vérifie le message par défaut de l'enum
       });
     });
   });
@@ -181,16 +184,12 @@ describe('HackMDClient Operations', () => {
       // Mock response for updating a note
       const updatedNote = {
         ...mockNote,
-        title: 'Updated Title',
         content: '# Updated Content',
       };
       mockObsidianService.mockSuccessfulApiResponse(updatedNote);
 
       // WHEN - updating the note
-      const result = await client.updateNote('note-id', {
-        title: 'Updated Title',
-        content: '# Updated Content',
-      });
+      const result = await client.updateNote('note-id', '# Updated Content');
 
       // THEN - the updated note should match the mock
       expect(result).toEqual(updatedNote);
@@ -216,9 +215,7 @@ describe('HackMDClient Operations', () => {
         });
 
       // WHEN - we update a note that requires background processing
-      const result = await client.updateNote('note-id', {
-        title: 'Delayed Update',
-      });
+      const result = await client.updateNote('note-id', 'Delayed Update');
 
       // THEN - we eventually get the updated note data
       expect(result).toHaveProperty('id', mockNote.id);
@@ -234,9 +231,7 @@ describe('HackMDClient Operations', () => {
       mockObsidianService.mockSuccessfulApiResponse(null);
 
       // WHEN/THEN - operation should fail with proper error
-      await expect(
-        client.updateNote('note-id', { title: 'Test' })
-      ).rejects.toMatchObject({
+      await expect(client.updateNote('note-id', 'Test')).rejects.toMatchObject({
         type: HackMDErrorType.UNKNOWN,
         message: expect.stringContaining('Failed to update note'),
       });

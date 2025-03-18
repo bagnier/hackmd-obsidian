@@ -47,7 +47,10 @@ describe('HackMDClient Integration', () => {
     mockObsidianService.mockSuccessfulApiResponse(fixtures.user);
 
     // Create and authenticate client
-    client = new HackMDClient({...DEFAULT_SETTINGS, accessToken: 'test-token'}, mockObsidianService);
+    client = new HackMDClient(
+      { ...DEFAULT_SETTINGS, accessToken: 'test-token' },
+      mockObsidianService
+    );
     await client.getMe();
     mockObsidianService.requestUrl.mockReset();
   });
@@ -77,9 +80,10 @@ describe('HackMDClient Integration', () => {
     // Mock a successful update response directly (status 200) to avoid the 202 flow with delay
     mockObsidianService.mockSuccessfulApiResponse(fixtures.notes[1]);
 
-    const updatedNote = await client.updateNote(newNote.id, {
-      content: '# Updated Content',
-    });
+    const updatedNote = await client.updateNote(
+      newNote.id,
+      '# Updated Content'
+    );
 
     // THEN - the note is updated successfully with the new details
     expect(updatedNote).toHaveProperty('id', fixtures.notes[1].id);
