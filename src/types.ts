@@ -130,8 +130,8 @@ export enum HackMDErrorType {
   AUTH_EXPIRED = 'Your HackMD session has expired. Please generate a new access token.',
 
   // Synchronization Errors
-  SYNC_CONFLICT_REMOTE = "Remote note has been modified since your last sync. Use 'Force Pull' to override local changes.",
-  SYNC_CONFLICT_LOCAL = "Local note has been modified since your last sync. Use 'Force Push' to override remote version.",
+  SYNC_CONFLICT_REMOTE = "Remote note has been modified since your last sync. Use 'Force Push' to override remote version.",
+  SYNC_CONFLICT_LOCAL = "Local note has been modified since your last sync. Use 'Force Pull' to override local changes.",
   SYNC_NOT_LINKED = "This note is not linked to HackMD. Use 'Push' to publish it first.",
   SYNC_METADATA_MISSING = "Sync metadata is missing. Use 'Force Push/Pull' to reset synchronization.",
 
